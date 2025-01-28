@@ -10,7 +10,8 @@ const io = require('socket.io')(http, {
   },
   allowEIO3: true,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  path: '/socket.io/'
 });
 const path = require('path');
 const Groq = require('groq-sdk');
@@ -133,5 +134,5 @@ if (process.env.NODE_ENV !== 'production') {
   });
 } else {
   // For Vercel serverless
-  module.exports = app;
+  module.exports = http;
 } 

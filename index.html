@@ -499,22 +499,31 @@
         </div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        const socket = io({
+        // Initialize socket with the current host
+        const socket = io(window.location.origin, {
             transports: ['websocket', 'polling'],
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
-            timeout: 60000
+            timeout: 60000,
+            path: '/socket.io/'
         });
 
+        // Initialize UI elements after socket is loaded
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
 
+        // Add error handling for socket connection
+        let isConnected = false;
+
         socket.on('connect', () => {
             console.log('Connected to server');
+            isConnected = true;
+            userInput.disabled = false;
+            sendButton.disabled = false;
             // Clear any previous error messages
             const errorMessages = document.querySelectorAll('.message.error-message');
             errorMessages.forEach(msg => msg.remove());
@@ -522,15 +531,21 @@
 
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
-            showError('Connection to server failed. Retrying...');
+            isConnected = false;
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            showError('Connection to server failed. Retrying... If this persists, please refresh the page.');
         });
 
         socket.on('disconnect', (reason) => {
             console.log('Disconnected:', reason);
+            isConnected = false;
+            userInput.disabled = true;
+            sendButton.disabled = true;
             if (reason === 'io server disconnect') {
-                // Reconnect if server disconnected
                 socket.connect();
             }
+            showError('Disconnected from server. Attempting to reconnect...');
         });
 
         function showError(message) {

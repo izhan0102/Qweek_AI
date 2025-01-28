@@ -9,11 +9,15 @@
     "routes": [
         {
             "src": "/socket.io/(.*)",
-            "dest": "server.js"
+            "dest": "/server.js"
+        },
+        {
+            "src": "/socket.io.js",
+            "dest": "https://cdn.socket.io/4.7.2/socket.io.min.js"
         },
         {
             "src": "/(.*)",
-            "dest": "server.js"
+            "dest": "/server.js"
         }
     ],
     "env": {
