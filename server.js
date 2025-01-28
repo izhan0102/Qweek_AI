@@ -7,8 +7,8 @@ const groq = new Groq({
   apiKey: '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'
 });
 
-// Store active SSE clients
-const clients = new Set();
+// Message queue for responses
+const messageQueue = new Map();
 
 // Serve static files
 app.use(express.static(path.join(__dirname)));
@@ -19,31 +19,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// SSE endpoint
-app.get('/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.flushHeaders();
-
-  const client = {
-    id: Date.now(),
-    res
-  };
-
-  clients.add(client);
-
-  req.on('close', () => {
-    clients.delete(client);
-  });
-});
-
 // Chat message endpoint
 app.post('/chat', async (req, res) => {
   try {
     const { text, length } = req.body;
+    const messageId = Date.now().toString();
     
+    // Send immediate response with messageId
+    res.json({ messageId });
+
+    // Process message asynchronously
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
@@ -77,23 +62,32 @@ When responding:
     const response = chatCompletion.choices[0]?.message?.content || 
       "<think>Hmm, I seem to be having trouble formulating a response.</think>\n\nI apologize, but I'm having a moment. Could you try asking your question again?";
 
-    // Send response to all connected clients
+    // Format and store response
     const formattedResponse = response.replace('</think>', '</think>\n\n').replace(/\n{3,}/g, '\n\n');
-    
-    clients.forEach(client => {
-      client.res.write(`data: ${JSON.stringify({ type: 'bot_response', content: formattedResponse })}\n\n`);
-    });
+    messageQueue.set(messageId, formattedResponse);
 
-    res.json({ success: true });
+    // Remove message from queue after 5 minutes
+    setTimeout(() => {
+      messageQueue.delete(messageId);
+    }, 5 * 60 * 1000);
+
   } catch (error) {
     console.error('Error:', error);
     const errorResponse = "<think>My processing units encountered an unexpected hiccup!</think>\n\nI ran into a technical issue. Could you please try again?";
-    
-    clients.forEach(client => {
-      client.res.write(`data: ${JSON.stringify({ type: 'bot_response', content: errorResponse })}\n\n`);
-    });
+    messageQueue.set(messageId, errorResponse);
+  }
+});
 
-    res.status(500).json({ error: 'Internal server error' });
+// Poll for response endpoint
+app.get('/poll/:messageId', (req, res) => {
+  const { messageId } = req.params;
+  const response = messageQueue.get(messageId);
+  
+  if (response) {
+    messageQueue.delete(messageId);
+    res.json({ content: response });
+  } else {
+    res.status(202).json({ status: 'pending' });
   }
 });
 

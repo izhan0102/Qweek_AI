@@ -501,58 +501,93 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        let eventSource = null;
-        let isConnected = false;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 3;
-        const reconnectDelay = 2000;
+        let showThinkingProcess = true;
+        let responseLengthPreference = 'medium';
 
-        function connectSSE() {
-            if (eventSource) {
-                eventSource.close();
+        function showError(message) {
+            // Remove any existing error messages first
+            const existingErrors = document.querySelectorAll('.error-message');
+            existingErrors.forEach(error => error.remove());
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'message bot-message error-message';
+            errorDiv.innerHTML = `<p>⚠️ ${message}</p>`;
+            chatContainer.appendChild(errorDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function pollForResponse(messageId) {
+            const maxAttempts = 60; // 30 seconds (500ms * 60)
+            let attempts = 0;
+
+            while (attempts < maxAttempts) {
+                try {
+                    const response = await fetch(`/poll/${messageId}`);
+                    if (!response.ok) {
+                        if (response.status === 202) {
+                            // Response not ready yet, wait and try again
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            attempts++;
+                            continue;
+                        }
+                        throw new Error('Failed to get response');
+                    }
+
+                    const data = await response.json();
+                    handleBotResponse(data.content);
+                    return;
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            eventSource = new EventSource('/events');
-            
-            eventSource.onopen = () => {
-                console.log('Connected to server');
-                isConnected = true;
-                reconnectAttempts = 0;
-                userInput.disabled = false;
-                sendButton.disabled = false;
-                
-                // Clear any previous error messages
-                const errorMessages = document.querySelectorAll('.message.error-message');
-                errorMessages.forEach(msg => msg.remove());
-            };
+            showError('Response timeout. Please try again.');
+            userInput.disabled = false;
+            sendButton.disabled = false;
+        }
 
-            eventSource.onerror = (error) => {
-                console.error('EventSource error:', error);
-                isConnected = false;
-                userInput.disabled = true;
-                sendButton.disabled = true;
-
-                reconnectAttempts++;
-                if (reconnectAttempts >= maxReconnectAttempts) {
-                    showError('Unable to connect to server. Please refresh the page.');
-                    eventSource.close();
-                } else {
-                    showError(`Connection failed. Attempt ${reconnectAttempts}/${maxReconnectAttempts}...`);
-                    setTimeout(connectSSE, reconnectDelay);
-                }
-            };
-
-            eventSource.onmessage = (event) => {
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'bot_response') {
-                        handleBotResponse(data.content);
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'message user-message';
+                    userDiv.textContent = message;
+                    chatContainer.appendChild(userDiv);
+                    
+                    userInput.value = '';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    
+                    userInput.blur();
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: message,
+                            length: responseLengthPreference
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to send message');
                     }
+
+                    const data = await response.json();
+                    pollForResponse(data.messageId);
                 } catch (error) {
-                    console.error('Error processing message:', error);
-                    showError('Error displaying response. Please try again.');
+                    console.error('Error sending message:', error);
+                    showError('Failed to send message. Please try again.');
+                    userInput.disabled = false;
+                    sendButton.disabled = false;
                 }
-            };
+            }
         }
 
         function handleBotResponse(response) {
@@ -594,48 +629,6 @@
 
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-
-        async function sendMessage() {
-            const message = userInput.value.trim();
-            if (message) {
-                try {
-                    const userDiv = document.createElement('div');
-                    userDiv.className = 'message user-message';
-                    userDiv.textContent = message;
-                    chatContainer.appendChild(userDiv);
-                    
-                    userInput.value = '';
-                    userInput.disabled = true;
-                    sendButton.disabled = true;
-                    
-                    userInput.blur();
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-
-                    const response = await fetch('/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            text: message,
-                            length: responseLengthPreference
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to send message');
-                    }
-                } catch (error) {
-                    console.error('Error sending message:', error);
-                    showError('Failed to send message. Please try again.');
-                    userInput.disabled = false;
-                    sendButton.disabled = false;
-                }
-            }
-        }
-
-        let showThinkingProcess = true;
-        let responseLengthPreference = 'medium';
 
         // Load saved preferences on startup
         window.addEventListener('load', () => {
@@ -708,9 +701,6 @@
                 if (callback) callback();
             }
         }
-
-        // Initialize connection when page loads
-        window.addEventListener('load', connectSSE);
     </script>
 </body>
 </html> 
