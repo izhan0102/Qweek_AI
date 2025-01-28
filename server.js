@@ -1,21 +1,5 @@
 const express = require('express');
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  transports: ['polling', 'websocket'],
-  allowEIO3: true,
-  pingTimeout: 30000,
-  pingInterval: 20000,
-  upgradeTimeout: 30000,
-  agent: false,
-  path: '/socket.io/',
-  serveClient: false
-});
 const path = require('path');
 const Groq = require('groq-sdk');
 
@@ -23,26 +7,48 @@ const groq = new Groq({
   apiKey: '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'
 });
 
-// Store conversations per socket
-const conversations = new Map();
+// Store active SSE clients
+const clients = new Set();
 
 // Serve static files
 app.use(express.static(path.join(__dirname)));
+app.use(express.json());
 
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Handle socket connections
-io.on('connection', (socket) => {
-  console.log('A user connected');
-  
-  // Initialize conversation history for this socket
-  conversations.set(socket.id, [
-    {
-      role: "system",
-      content: `You are QweekAI, a next-generation AI assistant. Your responses should be clear and concise.
+// SSE endpoint
+app.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  const client = {
+    id: Date.now(),
+    res
+  };
+
+  clients.add(client);
+
+  req.on('close', () => {
+    clients.delete(client);
+  });
+});
+
+// Chat message endpoint
+app.post('/chat', async (req, res) => {
+  try {
+    const { text, length } = req.body;
+    
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: `You are QweekAI, a next-generation AI assistant. Your responses should be clear and concise.
 
 When responding:
 1. Keep thought process brief and analytical
@@ -54,80 +60,47 @@ When responding:
 7. Strictly follow the requested response length:
    - "short": 1-2 sentences, very concise
    - "medium": 2-4 sentences, balanced detail
-   - "long": 4+ sentences, comprehensive explanation
+   - "long": 4+ sentences, comprehensive explanation`
+        },
+        {
+          role: "user",
+          content: `[${length.toUpperCase()}] ${text}`
+        }
+      ],
+      model: "deepseek-r1-distill-llama-70b",
+      temperature: 0.7,
+      max_completion_tokens: 2048,
+      top_p: 0.95,
+      stream: false
+    });
 
-Example format:
-<think>Analyzing user's request for technical solution</think>
-Here's how we can solve that...`
-    }
-  ]);
+    const response = chatCompletion.choices[0]?.message?.content || 
+      "<think>Hmm, I seem to be having trouble formulating a response.</think>\n\nI apologize, but I'm having a moment. Could you try asking your question again?";
 
-  socket.on('chat message', async (message) => {
-    try {
-      console.log('Received message:', message);
-      
-      // Get conversation history for this socket
-      const history = conversations.get(socket.id);
-      
-      // Add user message to history
-      history.push({
-        role: "user",
-        content: `[${message.length.toUpperCase()} RESPONSE] ${message.text}`
-      });
+    // Send response to all connected clients
+    const formattedResponse = response.replace('</think>', '</think>\n\n').replace(/\n{3,}/g, '\n\n');
+    
+    clients.forEach(client => {
+      client.res.write(`data: ${JSON.stringify({ type: 'bot_response', content: formattedResponse })}\n\n`);
+    });
 
-      const chatCompletion = await groq.chat.completions.create({
-        messages: history,
-        model: "deepseek-r1-distill-llama-70b",
-        temperature: 0.7,
-        max_completion_tokens: 2048,
-        top_p: 0.95,
-        stream: false
-      });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error:', error);
+    const errorResponse = "<think>My processing units encountered an unexpected hiccup!</think>\n\nI ran into a technical issue. Could you please try again?";
+    
+    clients.forEach(client => {
+      client.res.write(`data: ${JSON.stringify({ type: 'bot_response', content: errorResponse })}\n\n`);
+    });
 
-      console.log('Got response from Groq');
-
-      let response = chatCompletion.choices[0]?.message?.content;
-      
-      if (!response) {
-        console.error('No response content from Groq');
-        response = "<think>Hmm, I seem to be having trouble formulating a response.</think>\n\nI apologize, but I'm having a moment. Could you try asking your question again?";
-      }
-
-      // Add assistant response to history
-      history.push({
-        role: "assistant",
-        content: response
-      });
-
-      // Limit history size to prevent token overflow
-      if (history.length > 10) {
-        // Keep system message and last 8 messages
-        history.splice(1, history.length - 9);
-      }
-      
-      // Ensure proper spacing
-      response = response.replace('</think>', '</think>\n\n');
-      response = response.replace(/\n{3,}/g, '\n\n');
-      
-      console.log('Sending response to client');
-      socket.emit('bot response', response);
-
-    } catch (error) {
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        response: error.response
-      });
-      socket.emit('bot response', "<think>My processing units encountered an unexpected hiccup!</think>\n\nI ran into a technical issue. Could you please try again?");
-    }
-  });
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected');
-    // Clean up conversation history
-    conversations.delete(socket.id);
-  });
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// Update the server export
-module.exports = http; 
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+module.exports = app; 

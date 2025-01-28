@@ -499,76 +499,139 @@
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        // Update Socket.IO initialization
-        const socket = io({
-            transports: ['polling', 'websocket'],
-            reconnectionAttempts: 3,
-            reconnectionDelay: 2000,
-            timeout: 20000,
-            autoConnect: true,
-            forceNew: true,
-            path: '/socket.io/'
-        });
-
+        let eventSource = null;
+        let isConnected = false;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 3;
+        const reconnectDelay = 2000;
 
-        socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
-            reconnectAttempts++;
-            
-            if (reconnectAttempts >= maxReconnectAttempts) {
-                showError('Unable to connect to server. Please refresh the page.');
-                socket.disconnect();
-            } else {
-                showError(`Connection failed. Attempt ${reconnectAttempts}/${maxReconnectAttempts}...`);
-                
-                // Try to reconnect with polling if websocket fails
-                if (socket.io.opts.transports.includes('websocket')) {
-                    console.log('Falling back to polling transport');
-                    socket.io.opts.transports = ['polling'];
-                    socket.connect();
-                }
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
             }
-        });
 
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            reconnectAttempts = 0;
-            isConnected = true;
+            eventSource = new EventSource('/events');
+            
+            eventSource.onopen = () => {
+                console.log('Connected to server');
+                isConnected = true;
+                reconnectAttempts = 0;
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                
+                // Clear any previous error messages
+                const errorMessages = document.querySelectorAll('.message.error-message');
+                errorMessages.forEach(msg => msg.remove());
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('EventSource error:', error);
+                isConnected = false;
+                userInput.disabled = true;
+                sendButton.disabled = true;
+
+                reconnectAttempts++;
+                if (reconnectAttempts >= maxReconnectAttempts) {
+                    showError('Unable to connect to server. Please refresh the page.');
+                    eventSource.close();
+                } else {
+                    showError(`Connection failed. Attempt ${reconnectAttempts}/${maxReconnectAttempts}...`);
+                    setTimeout(connectSSE, reconnectDelay);
+                }
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'bot_response') {
+                        handleBotResponse(data.content);
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                    showError('Error displaying response. Please try again.');
+                }
+            };
+        }
+
+        function handleBotResponse(response) {
             userInput.disabled = false;
             sendButton.disabled = false;
-            
-            // Clear any previous error messages
-            const errorMessages = document.querySelectorAll('.message.error-message');
-            errorMessages.forEach(msg => msg.remove());
-        });
 
-        socket.on('disconnect', (reason) => {
-            console.log('Disconnected:', reason);
-            isConnected = false;
-            userInput.disabled = true;
-            sendButton.disabled = true;
-            
-            if (reason === 'io server disconnect' || reason === 'transport close') {
-                showError('Connection lost. Attempting to reconnect...');
-                setTimeout(() => socket.connect(), 1000);
+            if (response.includes('<think>')) {
+                const thinkMatch = response.match(/<think>(.*?)<\/think>/s);
+                const thinking = thinkMatch ? thinkMatch[1].trim() : '';
+                const mainResponse = response.replace(/<think>.*?<\/think>/s, '').trim();
+
+                const showThinkingDiv = () => {
+                    if (mainResponse) {
+                        const responseDiv = document.createElement('div');
+                        responseDiv.className = 'message bot-message';
+                        chatContainer.appendChild(responseDiv);
+                        typeText(responseDiv, mainResponse);
+                    }
+                };
+
+                if (thinking && showThinkingProcess) {
+                    const thinkDiv = document.createElement('div');
+                    thinkDiv.className = 'message bot-thinking';
+                    chatContainer.appendChild(thinkDiv);
+                    
+                    typeText(thinkDiv, thinking, () => {
+                        thinkDiv.classList.add('completed');
+                        setTimeout(showThinkingDiv, 300);
+                    });
+                } else {
+                    showThinkingDiv();
+                }
+            } else {
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'message bot-message';
+                chatContainer.appendChild(responseDiv);
+                typeText(responseDiv, response);
             }
-        });
 
-        function showError(message) {
-            // Remove any existing error messages first
-            const existingErrors = document.querySelectorAll('.error-message');
-            existingErrors.forEach(error => error.remove());
-
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'message bot-message error-message';
-            errorDiv.innerHTML = `<p>⚠️ ${message}</p>`;
-            chatContainer.appendChild(errorDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                try {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'message user-message';
+                    userDiv.textContent = message;
+                    chatContainer.appendChild(userDiv);
+                    
+                    userInput.value = '';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    
+                    userInput.blur();
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: message,
+                            length: responseLengthPreference
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to send message');
+                    }
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    showError('Failed to send message. Please try again.');
+                    userInput.disabled = false;
+                    sendButton.disabled = false;
+                }
+            }
         }
 
         let showThinkingProcess = true;
@@ -599,77 +662,6 @@
         document.getElementById('responseLength').addEventListener('change', function() {
             responseLengthPreference = this.value;
             localStorage.setItem('responseLength', this.value);
-        });
-
-        function sendMessage() {
-            const message = userInput.value.trim();
-            if (message) {
-                try {
-                    const userDiv = document.createElement('div');
-                    userDiv.className = 'message user-message';
-                    userDiv.textContent = message;
-                    chatContainer.appendChild(userDiv);
-                    
-                    userInput.value = '';
-                    userInput.disabled = true;
-                    sendButton.disabled = true;
-                    
-                    userInput.blur();
-                    
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    socket.emit('chat message', { text: message, length: responseLengthPreference });
-                } catch (error) {
-                    console.error('Error sending message:', error);
-                    showError('Failed to send message. Please try again.');
-                    userInput.disabled = false;
-                    sendButton.disabled = false;
-                }
-            }
-        }
-
-        socket.on('bot response', (response) => {
-            try {
-                userInput.disabled = false;
-                sendButton.disabled = false;
-
-                if (response.includes('<think>')) {
-                    const thinkMatch = response.match(/<think>(.*?)<\/think>/s);
-                    const thinking = thinkMatch ? thinkMatch[1].trim() : '';
-                    const mainResponse = response.replace(/<think>.*?<\/think>/s, '').trim();
-
-                    const showThinkingDiv = () => {
-                        if (mainResponse) {
-                            const responseDiv = document.createElement('div');
-                            responseDiv.className = 'message bot-message';
-                            chatContainer.appendChild(responseDiv);
-                            typeText(responseDiv, mainResponse);
-                        }
-                    };
-
-                    if (thinking && showThinkingProcess) {
-                        const thinkDiv = document.createElement('div');
-                        thinkDiv.className = 'message bot-thinking';
-                        chatContainer.appendChild(thinkDiv);
-                        
-                        typeText(thinkDiv, thinking, () => {
-                            thinkDiv.classList.add('completed');
-                            setTimeout(showThinkingDiv, 300);
-                        });
-                    } else {
-                        showThinkingDiv();
-                    }
-                } else {
-                    const responseDiv = document.createElement('div');
-                    responseDiv.className = 'message bot-message';
-                    chatContainer.appendChild(responseDiv);
-                    typeText(responseDiv, response);
-                }
-
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            } catch (error) {
-                console.error('Error processing bot response:', error);
-                showError('Error displaying response. Please try again.');
-            }
         });
 
         function typeText(element, text, callback) {
@@ -716,6 +708,9 @@
                 if (callback) callback();
             }
         }
+
+        // Initialize connection when page loads
+        window.addEventListener('load', connectSSE);
     </script>
 </body>
 </html> 
