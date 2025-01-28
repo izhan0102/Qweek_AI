@@ -8,6 +8,10 @@
     ],
     "routes": [
         {
+            "src": "/_vercel/insights/script.js",
+            "dest": "https://va.vercel-scripts.com/v1/script.js"
+        },
+        {
             "src": "/poll/.*",
             "dest": "/server.js",
             "headers": {
