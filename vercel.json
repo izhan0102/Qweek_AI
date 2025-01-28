@@ -8,11 +8,16 @@
     ],
     "routes": [
         {
+            "src": "/socket.io/(.*)",
+            "dest": "server.js"
+        },
+        {
             "src": "/(.*)",
             "dest": "server.js"
         }
     ],
     "env": {
-        "PORT": "3000"
+        "PORT": "3000",
+        "NODE_ENV": "production"
     }
 } 

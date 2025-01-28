@@ -502,23 +502,44 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        const socket = io();
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            timeout: 60000
+        });
+
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
 
         socket.on('connect', () => {
             console.log('Connected to server');
+            // Clear any previous error messages
+            const errorMessages = document.querySelectorAll('.message.error-message');
+            errorMessages.forEach(msg => msg.remove());
         });
 
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
-            showError('Connection to server failed. Please refresh the page.');
+            showError('Connection to server failed. Retrying...');
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+            if (reason === 'io server disconnect') {
+                // Reconnect if server disconnected
+                socket.connect();
+            }
         });
 
         function showError(message) {
+            // Remove any existing error messages first
+            const existingErrors = document.querySelectorAll('.error-message');
+            existingErrors.forEach(error => error.remove());
+
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'message bot-message';
+            errorDiv.className = 'message bot-message error-message';
             errorDiv.innerHTML = `<p>⚠️ ${message}</p>`;
             chatContainer.appendChild(errorDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
