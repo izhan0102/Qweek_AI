@@ -502,39 +502,49 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        // Initialize socket with the current host
-        const socket = io(window.location.origin, {
-            transports: ['websocket', 'polling'],
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 60000,
+        // Update Socket.IO initialization
+        const socket = io({
+            transports: ['polling', 'websocket'],
+            reconnectionAttempts: 3,
+            reconnectionDelay: 2000,
+            timeout: 20000,
+            autoConnect: true,
+            forceNew: true,
             path: '/socket.io/'
         });
 
-        // Initialize UI elements after socket is loaded
-        const chatContainer = document.getElementById('chatContainer');
-        const userInput = document.getElementById('userInput');
-        const sendButton = document.getElementById('sendButton');
-
-        // Add error handling for socket connection
-        let isConnected = false;
-
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            isConnected = true;
-            userInput.disabled = false;
-            sendButton.disabled = false;
-            // Clear any previous error messages
-            const errorMessages = document.querySelectorAll('.message.error-message');
-            errorMessages.forEach(msg => msg.remove());
-        });
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 3;
 
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
-            isConnected = false;
-            userInput.disabled = true;
-            sendButton.disabled = true;
-            showError('Connection to server failed. Retrying... If this persists, please refresh the page.');
+            reconnectAttempts++;
+            
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                showError('Unable to connect to server. Please refresh the page.');
+                socket.disconnect();
+            } else {
+                showError(`Connection failed. Attempt ${reconnectAttempts}/${maxReconnectAttempts}...`);
+                
+                // Try to reconnect with polling if websocket fails
+                if (socket.io.opts.transports.includes('websocket')) {
+                    console.log('Falling back to polling transport');
+                    socket.io.opts.transports = ['polling'];
+                    socket.connect();
+                }
+            }
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            reconnectAttempts = 0;
+            isConnected = true;
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            
+            // Clear any previous error messages
+            const errorMessages = document.querySelectorAll('.message.error-message');
+            errorMessages.forEach(msg => msg.remove());
         });
 
         socket.on('disconnect', (reason) => {
@@ -542,10 +552,11 @@
             isConnected = false;
             userInput.disabled = true;
             sendButton.disabled = true;
-            if (reason === 'io server disconnect') {
-                socket.connect();
+            
+            if (reason === 'io server disconnect' || reason === 'transport close') {
+                showError('Connection lost. Attempting to reconnect...');
+                setTimeout(() => socket.connect(), 1000);
             }
-            showError('Disconnected from server. Attempting to reconnect...');
         });
 
         function showError(message) {

@@ -5,13 +5,16 @@ const io = require('socket.io')(http, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-    transports: ['websocket', 'polling'],
     credentials: true
   },
+  transports: ['polling', 'websocket'],
   allowEIO3: true,
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  path: '/socket.io/'
+  pingTimeout: 30000,
+  pingInterval: 20000,
+  upgradeTimeout: 30000,
+  agent: false,
+  path: '/socket.io/',
+  serveClient: false
 });
 const path = require('path');
 const Groq = require('groq-sdk');
@@ -126,13 +129,5 @@ Here's how we can solve that...`
   });
 });
 
-// Update the server start
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  http.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT} 🚀`);
-  });
-} else {
-  // For Vercel serverless
-  module.exports = http;
-} 
+// Update the server export
+module.exports = http; 
