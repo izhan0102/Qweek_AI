@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QweekAI - Your AI Companion</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root[data-theme="dark"] {
+            --bg-color: #0f1115;
+            --container-bg: #1a1d21;
+            --text-color: #e4e6eb;
+            --primary-color: #6366f1;
+            --secondary-color: #3f4046;
+            --hover-color: #818cf8;
+            --bot-message-bg: #1e2227;
+            --user-message-bg: #6366f1;
+            --thinking-bg: #16181d;
+            --input-bg: #1e2227;
+            --input-border: #2e3238;
+            --accent-color: #818cf8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            padding: 20px;
+            background: var(--container-bg);
+            border-bottom: 1px solid var(--input-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .brand {
+            font-size: 1.8em;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: glow 3s ease-in-out infinite alternate;
+        }
+
+        .brand-divider {
+            position: relative;
+            height: 25px;
+            display: flex;
+            align-items: center;
+            padding: 0 5px;
+            margin-left: 2px;
+        }
+
+        .brand-divider::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            height: 100%;
+            width: 1px;
+            background: var(--secondary-color);
+            transform: rotate(15deg);
+        }
+
+        .credits {
+            font-size: 0.85em;
+            color: var(--text-color);
+            opacity: 0.8;
+            transition: all 0.2s ease;
+            background: var(--thinking-bg);
+            padding: 4px 12px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .credits:hover {
+            opacity: 1;
+            transform: translateY(-1px);
+            background: var(--bot-message-bg);
+        }
+
+        .credits i {
+            font-size: 0.9em;
+            color: var(--primary-color);
+        }
+
+        .chat-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding-bottom: 140px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-color) var(--bg-color);
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background-color: var(--primary-color);
+            border-radius: 20px;
+            border: 2px solid var(--bg-color);
+        }
+
+        .message {
+            padding: 14px 18px;
+            border-radius: 12px;
+            max-width: 90%;
+            animation: messageAppear 0.2s ease-out;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 14px;
+            letter-spacing: 0.2px;
+            user-select: text;
+        }
+
+        .message strong,
+        .message b {
+            color: inherit;
+            font-weight: 600;
+        }
+
+        .message strong::after,
+        .message b::after {
+            display: none;
+        }
+
+        .message p {
+            margin: 12px 0;
+        }
+
+        .message br {
+            content: '';
+            display: block;
+            margin: 8px 0;
+        }
+
+        .message .star-point {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin: 8px 0;
+            padding: 4px 0;
+        }
+
+        .message .star-point strong {
+            color: var(--primary-color);
+        }
+
+        .message ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .message li {
+            margin: 8px 0;
+        }
+
+        .user-message {
+            background: var(--user-message-bg);
+            color: white;
+            margin-left: auto;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+        }
+
+        .bot-message {
+            background: var(--bot-message-bg);
+            color: var(--text-color);
+            margin-right: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid var(--input-border);
+        }
+
+        .bot-thinking {
+            background: var(--thinking-bg);
+            color: var(--text-color);
+            opacity: 0.8;
+            margin-right: auto;
+            font-style: italic;
+            border-left: 2px solid var(--primary-color);
+            position: relative;
+            padding: 12px 16px 12px 20px;
+            max-width: 70%;
+            font-size: 13px;
+            animation: thinkingAppear 0.3s ease-out;
+        }
+
+        @keyframes thinkingAppear {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 0.8;
+                transform: translateX(0);
+            }
+        }
+
+        .bot-thinking::before {
+            content: "Thinking...";
+            display: block;
+            font-size: 0.8em;
+            margin-bottom: 4px;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .bot-thinking.completed::before {
+            content: "Thought Process";
+        }
+
+        .input-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px 20px;
+            background: var(--bg-color);
+            border-top: 1px solid var(--input-border);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .input-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid var(--input-border);
+            border-radius: 12px;
+            font-size: 15px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        .send-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        .send-btn:hover {
+            background: var(--hover-color);
+            transform: scale(1.05) rotate(10deg);
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+
+        @keyframes messageAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 5px rgba(99, 102, 241, 0.5); }
+            to { text-shadow: 0 0 15px rgba(99, 102, 241, 0.8); }
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 0; }
+            .header { padding: 10px 15px; }
+            .brand { font-size: 1.5em; }
+            .credits { font-size: 0.8em; }
+            .message { max-width: 90%; }
+            .input-container { padding: 10px 15px; }
+            .chat-container {
+                padding-bottom: 160px;
+            }
+            .thought-toggle {
+                padding: 4px 10px;
+            }
+        }
+
+        .controls-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            gap: 10px;
+            padding: 0 0 5px 0;
+            flex-wrap: wrap;
+        }
+
+        .thought-toggle, .length-selector {
+            background: var(--container-bg);
+            padding: 6px 12px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--input-border);
+            transition: all 0.2s ease;
+        }
+
+        .length-selector select {
+            background: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .length-selector select:focus {
+            border-color: var(--primary-color);
+        }
+
+        .length-selector span {
+            font-size: 13px;
+            color: var(--text-color);
+            user-select: none;
+        }
+
+        /* Switch styles */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--secondary-color);
+            transition: .3s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .3s;
+        }
+
+        .slider.round {
+            border-radius: 20px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo-container">
+                <div class="brand-wrapper">
+                    <h1 class="brand">QweekAI</h1>
+                    <div class="brand-divider"></div>
+                    <div class="credits">
+                        <i class="fas fa-code"></i>
+                        by izhan
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message bot-message">
+                <p><strong>Welcome to QweekAI</strong></p>
+                <p>I'm your AI companion, ready to assist with intelligent conversations and real-time insights.</p>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="controls-container">
+                <div class="thought-toggle">
+                    <label class="switch">
+                        <input type="checkbox" id="showThoughts" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span>Show Thinking</span>
+                </div>
+                <div class="length-selector">
+                    <span>Response Length:</span>
+                    <select id="responseLength">
+                        <option value="short">Short</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="long">Long</option>
+                    </select>
+                </div>
+            </div>
+            <div class="input-wrapper">
+                <input type="text" id="userInput" placeholder="Type your message here..." autocomplete="off">
+                <button class="send-btn" onclick="sendMessage()" id="sendButton">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        const socket = io();
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            showError('Connection to server failed. Please refresh the page.');
+        });
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'message bot-message';
+            errorDiv.innerHTML = `<p>⚠️ ${message}</p>`;
+            chatContainer.appendChild(errorDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        let showThinkingProcess = true;
+        let responseLengthPreference = 'medium';
+
+        // Load saved preferences on startup
+        window.addEventListener('load', () => {
+            const savedThoughtPreference = localStorage.getItem('showThoughts');
+            const savedLengthPreference = localStorage.getItem('responseLength');
+            
+            if (savedThoughtPreference !== null) {
+                showThinkingProcess = savedThoughtPreference === 'true';
+                document.getElementById('showThoughts').checked = showThinkingProcess;
+            }
+            
+            if (savedLengthPreference) {
+                responseLengthPreference = savedLengthPreference;
+                document.getElementById('responseLength').value = savedLengthPreference;
+            }
+        });
+
+        // Handle preference changes
+        document.getElementById('showThoughts').addEventListener('change', function() {
+            showThinkingProcess = this.checked;
+            localStorage.setItem('showThoughts', this.checked);
+        });
+
+        document.getElementById('responseLength').addEventListener('change', function() {
+            responseLengthPreference = this.value;
+            localStorage.setItem('responseLength', this.value);
+        });
+
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                try {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'message user-message';
+                    userDiv.textContent = message;
+                    chatContainer.appendChild(userDiv);
+                    
+                    userInput.value = '';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    
+                    userInput.blur();
+                    
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    socket.emit('chat message', { text: message, length: responseLengthPreference });
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    showError('Failed to send message. Please try again.');
+                    userInput.disabled = false;
+                    sendButton.disabled = false;
+                }
+            }
+        }
+
+        socket.on('bot response', (response) => {
+            try {
+                userInput.disabled = false;
+                sendButton.disabled = false;
+
+                if (response.includes('<think>')) {
+                    const thinkMatch = response.match(/<think>(.*?)<\/think>/s);
+                    const thinking = thinkMatch ? thinkMatch[1].trim() : '';
+                    const mainResponse = response.replace(/<think>.*?<\/think>/s, '').trim();
+
+                    const showThinkingDiv = () => {
+                        if (mainResponse) {
+                            const responseDiv = document.createElement('div');
+                            responseDiv.className = 'message bot-message';
+                            chatContainer.appendChild(responseDiv);
+                            typeText(responseDiv, mainResponse);
+                        }
+                    };
+
+                    if (thinking && showThinkingProcess) {
+                        const thinkDiv = document.createElement('div');
+                        thinkDiv.className = 'message bot-thinking';
+                        chatContainer.appendChild(thinkDiv);
+                        
+                        typeText(thinkDiv, thinking, () => {
+                            thinkDiv.classList.add('completed');
+                            setTimeout(showThinkingDiv, 300);
+                        });
+                    } else {
+                        showThinkingDiv();
+                    }
+                } else {
+                    const responseDiv = document.createElement('div');
+                    responseDiv.className = 'message bot-message';
+                    chatContainer.appendChild(responseDiv);
+                    typeText(responseDiv, response);
+                }
+
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } catch (error) {
+                console.error('Error processing bot response:', error);
+                showError('Error displaying response. Please try again.');
+            }
+        });
+
+        function typeText(element, text, callback) {
+            try {
+                let index = 0;
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true,
+                    silent: true
+                });
+
+                text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                const parsedText = marked.parse(text);
+                element.innerHTML = '';
+                
+                function type() {
+                    if (index < parsedText.length) {
+                        element.innerHTML = parsedText.substring(0, index + 1);
+                        index++;
+                        
+                        // Smooth scroll during typing
+                        requestAnimationFrame(() => {
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        });
+                        
+                        setTimeout(type, 2);
+                    } else {
+                        element.innerHTML = parsedText;
+                        if (element.classList.contains('bot-thinking')) {
+                            element.classList.add('completed');
+                        }
+                        if (callback) callback();
+                        
+                        // Final scroll after completion
+                        requestAnimationFrame(() => {
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        });
+                    }
+                }
+                type();
+            } catch (error) {
+                console.error('Error in typeText:', error);
+                element.textContent = text;
+                if (callback) callback();
+            }
+        }
+    </script>
+</body>
+</html> 
