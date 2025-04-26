@@ -4,7 +4,7 @@ const path = require('path');
 const Groq = require('groq-sdk');
 
 const groq = new Groq({
-  apiKey: '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'
+  apiKey: 'gsk_S2w0kTU7q8R3SOFGth5zWGdyb3FY3RgkCLl8RhKztXFswq221rJZC'
 });
 
 // Message queue for responses
